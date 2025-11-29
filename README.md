@@ -1,175 +1,271 @@
-# First Model : RNN Autoencoder for Time-Series Anomaly Detection in a Simulated Communication Network
+# 🛰️ Detección de Anomalías en Series Temporales IQ mediante Autoencoders (Conv1D + LSTM)
 
-## Overview
+Este proyecto implementa un sistema completo para detectar **ataques de interferencia (jamming)** en una red de comunicaciones simulada, utilizando **autoencoders para series temporales** basados en **CNN + LSTM**.
+La detección se basa en el **error de reconstrucción** sobre ventanas de datos IQ.
 
-This project provides an RNN autoencoder for anomaly detection in time-series samples from a simulated communication network. The primary goal is to detect attacks by analyzing reconstruction errors from the autoencoder model. The code includes data loading, preprocessing, model training, and anomaly detection steps.
+---
 
-## Project Structure
+## 📁 Estructura del Proyecto
 
-- `data/`: Contains the data files used for training and testing.
-- `src/`: Contains the source code for data generation, model training, anomaly detection, and plotting.
-- `attack_scenario/`: Contains the code for running attacks.
-- `README.md`: Provides an overview and instructions for the project.
-- `requirements.txt`: Lists the Python dependencies required to run the project.
+```
+TIME-SERIES-ANOMALY-DETECTION/
+│
+├── data/
+│   ├── pure_samples_1/
+│   │   └── pure_samples_1.csv
+│   ├── under_attack_samples_1/
+│   │   └── under_attack_samples_1.csv
+│   └── intrusion_detected_plots/
+│       ├── intrusion_sequence_30.png
+│       ├── intrusion_sequence_54.png
+│       └── ...
+│
+├── src/
+│   ├── data_generator.py
+│   ├── model.py
+│   ├── hybrid.py
+│   ├── anomaly_detection.py
+│   └── __pycache__/
+│
+├── hybrid_conv_lstm_simple.keras
+├── hybrid_conv_lstm_simple_final.keras
+├── hybrid_simple_best.keras
+├── rnn_autoencoder_model.h5
+├── README.md
+└── requirements.txt
+```
 
-## Getting Started
+---
 
-### Prerequisites
+## 🚀 Objetivo del Proyecto
 
-- Python 3.7+
-- Required libraries listed in `requirements.txt`
+Detectar **anomalías en señales IQ** provenientes de un sistema de comunicaciones.
+Un ataque jammer introduce patrones anómalos que **incrementan el error de reconstrucción del autoencoder**, lo que permite distinguir situaciones normales de eventos maliciosos.
 
-### Installation
+---
 
-1. Clone the repository:
-    ```sh
-    git clone https://github.com/your_username/software-package.git
-    cd software-package
-    ```
+# 🔧 Componentes Principales
 
-2. Install the required libraries:
-    ```sh
-    pip install -r requirements.txt
-    ```
+---
 
-### Usage
+## 1. Data Generator (`data_generator.py`)
 
-1. **Running the Attack:**
-    - Navigate to the `attack_scenario` directory:
-    ```sh
-    cd attack_scenario
-    ```
+El Data Generator:
 
-    - Ensure you have UHD installed and an SDR connected and powered on. To install UHD on Ubuntu, use the following commands:
+* Lee archivos `.csv` con muestras IQ.
+* Separa parte real e imaginaria.
+* Normaliza dinámicamente por ventana.
+* Crea ventanas deslizantes (por defecto `SEQ_LEN = 100`).
+* Retorna tensores con forma:
 
-    ```sh
-    # Install dependencies
-    sudo apt-get update
-    sudo apt-get install libboost-all-dev libusb-1.0-0-dev python3-mako python3-numpy python3-requests cmake g++ libgmp-dev swig doxygen graphviz python3-scipy
+```
+(batch_size, seq_len, 2)
+```
 
-    # Add Ettus Research PPA and install UHD
-    sudo add-apt-repository ppa:ettusresearch/uhd
-    sudo apt-get update
-    sudo apt-get install libuhd-dev uhd-host
+Incluye características avanzadas:
 
-    # Verify the installation
-    uhd_find_devices
-    ```
+* Reinicio automático del generador.
+* Manejo de archivos grandes sin cargarlos en memoria.
+* Compatibilidad con data augmentation en tiempo real.
 
-    - Configure the `config.yaml` file to set up the attack type, power, etc. Example `config.yaml`:
-        ```yaml
-        ---
-         # The options below are applicable to all attack types
-         # Select Frequency operating range (1=2.4GHz, 2=5GHz) | default = 1
-         band: 1
-         # Select Jammer Type (1=constant, 2=sweeping, 3=random channel hopping) | default = 1
-         jammer: 1
-         # Select Type of Jamming (1=proactive, 2=reactive) | default = 1
-         jamming: 1
-         # Select Jamming waveform (1=single tone, 2=swept sine, 3=gaussian noise) | default = 3
-         waveform: 2
-         # Enter Jammer transmit power in dBm (Min = -40dBm, Max = 13dBm) | default = 6dBm
-         power: 10
-         # Enter channel jamming duration in sec | default = 10s
-         t_jamming: 5
-         
-         # The options below are optional depending on the jammer of choice
-         # Enter total runtime duration in sec | default = 200s
-         duration: 100 # This option doesn't apply to constant jammer
-         # Enter distance between adjacent channels in MHz (Min = 1MHz, Max = 20MHz) | default = 20MHz
-         ch_dist: 1 # This option doesn't apply to constant jammer and 5GHz band
-         # Enter the frequency to Jam in MHz | default = 2462MHz
-         freq: 3440.5 # This option only applies to constant jammer
-         # Select channel allocation (1=UNII-1, 2=UNII-2a, 3=UNII-2c, 4=UNII-3)
-         allocation: 1 # This option only applies to 5GHz band
-        ```
+---
 
-    - Run the `jam.py` script to start the attack process:
-    ```sh
-    python jam.py
-    ```
+## 2. Modelo Híbrido Conv1D + LSTM (`hybrid.py`)
 
-2. **Generate, Save, and Prepare your data:**
-    - After setting up the network and starting the jammer based on the configured setup, set parameters based on your network settings.
-    - Navigate to the `data` directory:
-    ```sh
-    cd data
-    ```
+Arquitectura del autoencoder:
 
-    - Run the `data_generate.py` script to generate and save the `.dat` file containing IQ samples:
-    ```sh
-    python data_generate.py
-    ```
+### **Encoder**
 
-    - Save your `.dat` or `.csv` files containing samples in the `data/` directory.
-    - Ensure your `.dat` files are formatted as binary files containing 32-bit floating-point numbers.
+* Capas `Conv1D` con `BatchNorm` + `MaxPooling`.
+* LSTM de 256 unidades para capturar dinámica temporal.
+* Capa latente entre 32–64 dimensiones.
 
-3. **Training the Model:**
-    - Run the `model.py` script to train the RNN autoencoder on normal IQ samples (without jamming attacks).
-    ```sh
-    python src/model.py
-    ```
+### **Decoder**
 
-4. **Anomaly Detection:**
-    - Use the trained model to detect anomalies in IQ samples that may contain jamming attacks by running the `anomaly_detection.py` script.
-    ```sh
-    python src/anomaly_detection.py
-    ```
+* `RepeatVector(seq_len)`
+* LSTM de 64 unidades
+* Capas densas temporales para reconstruir IQ.
 
-### Detailed Documentation
+Compilado con:
 
-#### Data Loading and Preprocessing
+```python
+optimizer = Adam(1e-3)
+loss = MeanSquaredError()
+```
 
-- `load_data(filepath)`: This function loads data from a specified file path. It supports `.csv` and `.dat` file formats. For `.csv` files, it reads a specific column containing the IQ samples. For `.dat` files, it reads binary-encoded data.
+Entrenado mediante:
 
-- `count_lines(filepath)`: This function counts the number of lines in a file, which is useful for understanding the size of the dataset.
+```python
+train_on_batch(X_aug, X_original)
+```
 
-#### Data Generator
+---
 
-The `DataGenerator` class is designed to handle batch-wise data loading and preprocessing. It reads data from the file, processes it to extract real and imaginary parts, normalizes the data, and returns it in batches suitable for training the RNN autoencoder.
+## 3. Inferencia y Anomaly Detection (`anomaly_detection.py`)
 
-- `__init__(self, filepath, batch_size, sequence_length, max_samples=None, for_training=True)`: Initializes the data generator with the file path, batch size, sequence length, maximum samples to process, and a flag indicating if the generator is used for training.
+Incluye:
 
-- `reset(self)`: Resets the generator state, reinitializing the file pointer and clearing internal buffers.
+* Cálculo de error por ventana (MSE).
 
-- `__iter__(self)`: Initializes the iterator, setting the file pointer to the beginning.
+* Histogramas de errores.
 
-- `close(self)`: Closes the file handle to release resources.
+* Selección automática del **umbral óptimo** usando:
 
-- `process_data(self, samples)`: Processes the samples to extract and normalize the real and imaginary parts, and structures them into sequences.
+  ```
+  precision_recall_curve → mejor F1
+  ```
 
-- `__next__(self)`: Fetches the next batch of data, processes it, and returns it in a format suitable for the RNN autoencoder.
+* Generación automática de gráficos bajo ataque en:
 
-#### Model Definition and Training
+```
+data/intrusion_detected_plots/
+```
 
-The model is defined using `Sequential` from the `keras` library. It is an RNN autoencoder consisting of LSTM layers, a repeat vector layer, and time-distributed dense layers.
+---
 
-- `Sequential()`: Initializes a sequential model.
-- `LSTM()`: Adds LSTM layers to the model.
-- `RepeatVector()`: Repeats the input to match the sequence length.
-- `TimeDistributed()`: Applies a dense layer to each time step of the sequence.
+# 🧪 Experimentos
 
-The model is compiled with the Adam optimizer and Mean Squared Error (MSE) loss function.
+---
 
-Training the model involves:
-- Initializing the `DataGenerator` with normal IQ samples.
-- Iterating over epochs and steps to train the model on batches of data.
-- Using `train_on_batch` to update the model weights for each batch.
+## 🧪 **Experimento A — Conv–LSTM + Ruido Gaussiano**
 
-#### Anomaly Detection and Plotting
+Aumentación simple:
 
-Anomaly detection is performed using the trained model to predict IQ samples and calculate reconstruction errors.
+```
+X_aug = X + N(0, 0.01 * std)
+```
 
-- Generate predictions using the trained model.
-- Calculate reconstruction errors for each sample.
-- Determine the threshold for detecting anomalies based on the 99th percentile of the errors.
-- Flag sequences with errors above the threshold as intrusions.
-- Plot the original vs. reconstructed IQ samples for sequences where intrusions are detected, highlighting the detected intrusions.
+**Resultados:**
 
-### Testing
+* Muy buena separación entre pure y jammer.
+* **F1 ≈ 0.50** (vs baseline ≈ 0.13).
 
-A test script is provided to validate the data generator and model setup using synthetic data. The script generates random complex numbers, saves them to a `.dat` file, and uses the data generator to load and process the data.
+---
 
-To run the test script:
-```sh
-python src/test_script.py
+## 🧪 **Experimento B — Aumentación Avanzada**
+
+Incluye:
+
+* Ruido gaussiano
+* Amplitude scaling
+* Circular time shifting
+* Impulse noise
+
+**Resultados:**
+
+* Mayor robustez general
+* F1 se mantiene estable ≈ **0.50**
+* Limitación: falta regularización temporal explícita.
+
+---
+
+## 🧪 **Experimento C — Denoising Autoencoder + Regularización Temporal**
+
+### ✔ Entrenamiento con ruido pesado
+
+El modelo aprende a reconstruir señales limpias a partir de señales distorsionadas.
+
+### ✔ Regularización temporal añadida
+
+Pérdida total:
+
+```
+L = MSE(x, x_hat) + λ · Σ_t (x̂[t+1] – x̂[t])²
+```
+
+### ✔ Beneficios
+
+* Reduce sobreajuste a transitorios irrelevantes.
+* Decoder más estable.
+* Aumenta separación entre pure y jammer.
+* F1 puede subir a **0.60–0.70**.
+
+➡️ Diseñado para empujar el sistema hacia la meta **F1 = 0.7–0.85**.
+
+---
+
+# 📊 Visualización de Intrusiones
+
+El sistema genera imágenes como:
+
+```
+intrusion_detected_plots/
+│ intrusion_sequence_30.png
+│ intrusion_sequence_54.png
+│ ...
+```
+
+Cada figura muestra:
+
+* Señal original vs reconstruida.
+* Error punto a punto.
+* Marcadores cuando la ventana fue clasificada como anomalía.
+
+---
+
+# ▶️ Cómo Entrenar el Modelo
+
+Desde `src/`:
+
+```bash
+python hybrid.py
+```
+
+Esto:
+
+* Inicializa modelo + generadores.
+* Entrena por 30 epochs (configurable).
+* Guarda mejores versiones como:
+
+```
+hybrid_conv_lstm_simple.keras
+hybrid_simple_best.keras
+```
+
+---
+
+# ▶️ Cómo Realizar Detección de Anomalías
+
+Ejecutar:
+
+```bash
+python anomaly_detection.py
+```
+
+El script:
+
+* Carga modelo entrenado.
+* Procesa señales bajo ataque.
+* Calcula errores por ventana.
+* Determina mejor umbral según F1.
+* Guarda gráficos de secuencias anomalía.
+
+---
+
+# 📝 Requisitos
+
+Archivo `requirements.txt` incluye:
+
+* tensorflow / keras
+* numpy
+* pandas
+* matplotlib
+* scikit-learn
+
+Instalación:
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+# 🏁 Conclusión
+
+El sistema implementa un pipeline completo para detección de ataques de jamming usando autoencoders temporales con:
+
+* Arquitectura híbrida **CNN + LSTM**
+* Data augmentation avanzado
+* Regularización temporal para mejorar discriminación
+* Umbral óptimo automático vía curva PR
+
