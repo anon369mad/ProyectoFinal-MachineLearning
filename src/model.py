@@ -23,8 +23,13 @@ max_train_samples = 100000
 train_steps = max_train_samples // (batch_size * sequence_length)
 
 # Initialize the data generator for training
-train_gen_instance = DataGenerator('data/5G_DL_IQ_no_jamming_0924.dat', batch_size=batch_size, sequence_length=sequence_length, max_samples=max_train_samples, for_training=True)
-
+train_gen_instance = DataGenerator(
+    './data/pure_samples_1/pure_samples_1.csv',
+    batch_size=batch_size,
+    sequence_length=sequence_length,
+    max_samples=max_train_samples,
+    for_training=True
+)
 # Train the model
 num_epochs = 9
 steps_per_epoch = train_steps
